@@ -1,6 +1,3 @@
-from __future__ import print_function
-from builtins import range
-
 """
 SECTION 1 : Load and setup data for training
 
@@ -11,7 +8,7 @@ iris_test.csv  = datasets for testing purpose, 20% from the original data
 import pandas as pd
 
 #load
-datatrain = pd.read_csv('../Datasets/iris/iris_train.csv')
+datatrain = pd.read_csv('iris_train.csv')
 
 #change string value to numeric
 datatrain.loc[datatrain['species']=='Iris-setosa', 'species']=0
@@ -31,65 +28,59 @@ SECTION 2 : Build and Train Model
 
 Multilayer perceptron model, with one hidden layer.
 input layer : 4 neuron, represents the feature of Iris
-hidden layer : 3 neuron, activation using ReLU
+hidden layer : 10 neuron, activation using ReLU
 output layer : 3 neuron, represents the class of Iris
 
 optimizer = stochastic gradient descent with no batch-size
 loss function = categorical cross entropy
 learning rate = 0.01
-epoch = 50
+epochs = 500
 """
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-torch.manual_seed(1234)
+import tensorflow as tf
+from tensorflow.keras.layers import Dense
+from tensorflow.keras import Model
+from tensorflow.keras.utils import to_categorical
 
-#hyperparameters
-hl = 3
-lr = 0.01
-num_epoch = 50
+tf.random.set_seed(1103) # avoiding different result of random
 
-#build model
-class Net(nn.Module):
+#change target format
+cat_ytrain = to_categorical(ytrain) 
 
-    def __init__(self):
-        super(Net, self).__init__()
-        self.fc1 = nn.Linear(4, hl)
-        self.fc2 = nn.Linear(hl, 3)
+# create a class of Model
+class Net(Model):
+  def __init__(self):
+    super(Net, self).__init__()
+    self.d1 = Dense(10, activation='relu')
+    self.d2 = Dense(3, activation='softmax')
 
-    def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = self.fc2(x)
-        return x
-        
-net = Net()
+  def call(self, x):
+    x = self.d1(x)
+    return self.d2(x)
 
-#choose optimizer and loss function
-criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.SGD(net.parameters(), lr=lr)
+# Buat sebuah contoh dari model
+model = Net()
+epochs = 500
+loss_object = tf.keras.losses.CategoricalCrossentropy()
+optimizer = tf.keras.optimizers.SGD(learning_rate=0.01)
 
-#train
-for epoch in range(num_epoch):
-    X = torch.Tensor(xtrain).float()
-    Y = torch.Tensor(ytrain).long()
+loss = 0
+for epoch in range(epochs):
+    with tf.GradientTape() as tape:
+        predictions = model(xtrain)
+        loss = loss_object(cat_ytrain, predictions)
 
-    #feedforward - backprop
-    optimizer.zero_grad()
-    out = net(X)
-    loss = criterion(out, Y)
-    loss.backward()
-    optimizer.step()
-    acc = 100 * torch.sum(Y==torch.max(out.data, 1)[1]).double() / len(Y)
-    print ('Epoch [%d/%d] Loss: %.4f   Acc: %.4f' 
-                   %(epoch+1, num_epoch, loss.item(), acc.item()))
-
+        if epoch%50==0:
+            print("%d / 50 -- loss = %.4f" % (epoch, loss.numpy()))
+            
+    gradients = tape.gradient(loss, model.trainable_variables)
+    optimizer.apply_gradients(zip(gradients, model.trainable_variables))
 
 """
 SECTION 3 : Testing model
 """
 #load
-datatest = pd.read_csv('../Datasets/iris/iris_test.csv')
+datatest = pd.read_csv('iris_test.csv')
 
 #change string value to numeric
 datatest.loc[datatest['species']=='Iris-setosa', 'species']=0
@@ -105,10 +96,14 @@ xtest = datatest_array[:,:4]
 ytest = datatest_array[:,4]
 
 #get prediction
-X = torch.Tensor(xtest).float()
-Y = torch.Tensor(ytest).long()
-out = net(X)
-_, predicted = torch.max(out.data, 1)
+classes = np.argmax(model(xtest).numpy(), axis=1)
 
 #get accuration
-print('Accuracy of the network %.4f %%' % (100 * torch.sum(Y==predicted).double() / len(Y)))
+import numpy as np
+accuration = np.sum(classes == ytest)/len(ytest) * 100
+
+print("Test Accuration : " + str(accuration) + '%')
+print("Prediction :")
+print(classes)
+print("Target :")
+print(np.asarray(ytest,dtype="int32"))
